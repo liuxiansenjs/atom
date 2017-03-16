@@ -201,6 +201,25 @@ describe('Workspace', () => {
               ])
             })
           })
+
+          it('finds items in docks', () => {
+            const dock = atom.workspace.getRightDock()
+            const ITEM_URI = 'atom://test'
+            const item = {
+              getURI: () => ITEM_URI,
+              getDefaultLocation: jasmine.createSpy().andReturn('left'),
+              getElement: () => document.createElement('div')
+            }
+            dock.getActivePane().addItem(item)
+            expect(dock.getPaneItems()).toHaveLength(1)
+            waitsForPromise(() => atom.workspace.open(ITEM_URI, {searchAllPanes: true}))
+            runs(() => {
+              expect(item.getDefaultLocation).not.toHaveBeenCalled()
+              expect(atom.workspace.getPaneItems()).toHaveLength(1)
+              expect(dock.getPaneItems()).toHaveLength(1)
+              expect(dock.getPaneItems()[0]).toBe(item)
+            })
+          })
         })
 
         describe('when the active pane does not have an editor for the given uri', () => {
@@ -215,6 +234,46 @@ describe('Workspace', () => {
               expect(workspace.getActivePaneItem()).toBe(editor)
               expect(workspace.getActivePane().items).toEqual([editor])
               expect(workspace.getActivePane().activate).toHaveBeenCalled()
+            })
+          })
+
+          it("uses the location specified by the model's `getDefaultLocation()` method", () => {
+            const item = {
+              getDefaultLocation: jasmine.createSpy().andReturn('right'),
+              getElement: () => document.createElement('div')
+            }
+            const opener = jasmine.createSpy().andReturn(item)
+            const dock = atom.workspace.getRightDock()
+            spyOn(atom.workspace.previousLocations, 'load').andReturn(Promise.resolve())
+            spyOn(atom.workspace, 'getOpeners').andReturn([opener])
+            expect(dock.getPaneItems()).toHaveLength(0)
+            waitsForPromise(() => atom.workspace.open('a'))
+            runs(() => {
+              expect(dock.getPaneItems()).toHaveLength(1)
+              expect(opener).toHaveBeenCalled()
+              expect(item.getDefaultLocation).toHaveBeenCalled()
+            })
+          })
+
+          it('prefers the last location the user used for that item', () => {
+            const ITEM_URI = 'atom://test'
+            const item = {
+              getURI: () => ITEM_URI,
+              getDefaultLocation: jasmine.createSpy().andReturn('left'),
+              getElement: () => document.createElement('div')
+            }
+            const opener = uri => uri === ITEM_URI ? item : null
+            const dock = atom.workspace.getRightDock()
+            spyOn(atom.workspace.previousLocations, 'load').andCallFake(uri =>
+              uri === 'atom://test' ? Promise.resolve('right') : Promise.resolve()
+            )
+            spyOn(atom.workspace, 'getOpeners').andReturn([opener])
+            expect(dock.getPaneItems()).toHaveLength(0)
+            waitsForPromise(() => atom.workspace.open(ITEM_URI))
+            runs(() => {
+              expect(dock.getPaneItems()).toHaveLength(1)
+              expect(dock.getPaneItems()[0]).toBe(item)
+              expect(item.getDefaultLocation).not.toHaveBeenCalled()
             })
           })
         })
@@ -246,6 +305,22 @@ describe('Workspace', () => {
           runs(() => {
             expect(workspace.getActivePane()).toBe(pane1)
             expect(workspace.getActivePaneItem()).toBe(editor1)
+          })
+        })
+
+        it('activates the dock with the matching item', () => {
+          const dock = atom.workspace.getRightDock()
+          const ITEM_URI = 'atom://test'
+          const item = {
+            getURI: () => ITEM_URI,
+            getDefaultLocation: jasmine.createSpy().andReturn('left'),
+            getElement: () => document.createElement('div')
+          }
+          dock.getActivePane().addItem(item)
+          spyOn(dock, 'activate')
+          waitsForPromise(() => atom.workspace.open(ITEM_URI, {searchAllPanes: true}))
+          runs(() => {
+            expect(dock.activate).toHaveBeenCalled()
           })
         })
       })
